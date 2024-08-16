@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from models_builder.ltae import LTAE2d
-
+from models_builder.convlstm import ConvLSTM, BConvLSTM
 
 class UTAE(nn.Module):
     def __init__(
