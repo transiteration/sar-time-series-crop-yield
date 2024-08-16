@@ -1,4 +1,4 @@
-from models import utae, pastis_unet3d, convlstm, convgru, fpn
+from models_builder import utae, pastis_unet3d, convlstm, convgru, fpn
 import torch.nn as nn
 import torch
 

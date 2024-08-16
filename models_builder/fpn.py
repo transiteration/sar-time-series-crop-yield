@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-from models.convlstm import ConvLSTM
+from models_builder.convlstm import ConvLSTM
 
 
 class FPNConvLSTM(nn.Module):

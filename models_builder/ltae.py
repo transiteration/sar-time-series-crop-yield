@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models.positional_encoding import PositionalEncoder
+from models_builder.positional_encoding import PositionalEncoder
 
 
 class LTAE2d(nn.Module):

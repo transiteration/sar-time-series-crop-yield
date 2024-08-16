@@ -6,7 +6,7 @@ License: MIT
 import torch
 import torch.nn as nn
 
-from models.ltae import LTAE2d
+from models_builder.ltae import LTAE2d
 
 
 class UTAE(nn.Module):

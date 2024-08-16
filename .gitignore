@@ -1,3 +1,5 @@
 sickle_toy_dataset/
 *.ipynb
 logs/
+models/
+*.pth
