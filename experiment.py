@@ -9,6 +9,7 @@ import setproctitle
 import pandas as pd
 from tqdm import tqdm
 import torchnet as tnt
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from utils.dataset import SICKLE_Dataset
 from utils import utae_utils, model_utils
@@ -82,7 +83,7 @@ def train_step(model, dataloader, optimizer, loss_fn, device, CFG):
     metrics = get_metrics(predictions, targets, pid_masks, ignore_index=CFG.ignore_index, task=CFG.task)
     return loss_meter.value()[0], metrics
 
-def eval_step(model, dataloader, loss_fn, device, CFG):
+def eval_step(model, dataloader, loss_fn, device, CFG, log=False):
     model.eval()
     loss_meter = tnt.meter.AverageValueMeter()
     predictions, targets, pid_masks = None, None, None
@@ -102,6 +103,26 @@ def eval_step(model, dataloader, loss_fn, device, CFG):
                 predictions = torch.cat([predictions, y_pred], dim=0)
                 targets = torch.cat([targets, masks], dim=0)
                 pid_masks = torch.cat([pid_masks, plot_mask], dim=0)
+                    
+            if log:
+                y_pred = y_pred.squeeze(dim=1)
+                images, dates = data["S1"]
+                images, dates, gt_masks, pred_masks = \
+                    images.cpu().numpy(), dates.cpu().numpy(), \
+                    masks.cpu().numpy(), y_pred.cpu().numpy()        
+                gt_masks[gt_masks == -999] = -1
+                gt_masks[gt_masks < -1] = 0
+                id = 0
+                for image, date, gt_mask, pred_mask in \
+                    zip(images, dates, gt_masks, pred_masks):
+                    image = image[len(date[date != 0]) - 1]
+                    image = image[CFG.satellites["S1"]["rgb_bands"]].transpose(1, 2, 0)
+                    image = ((image - np.min(image)) / (np.max(image) - np.min(image)))
+                    pred_mask[gt_mask == -1] = -1
+                    plt.imsave(f"eval_results/{i}_{id}_S1.png", image)
+                    plt.imsave(f"eval_results/{i}_{id}_gt.png", gt_mask)
+                    plt.imsave(f"eval_results/{i}_{id}_pred_mask_whole.png", pred_mask)
+                    id += 1
 
             loss_meter.add(loss.item())
 

@@ -60,44 +60,16 @@ def eval_process(CFG) -> None:
     checkpoint = torch.load(os.path.join(CFG.models_dir, CFG.model_name + ".pth"))
     model.load_state_dict(checkpoint["model"])
     loss_fn = RMSELoss(ignore_index=CFG.ignore_index)
-
-    # _, val_metrics = eval_step(model=model,
-    #                                 dataloader=val_dataloader,
-    #                                 loss_fn=loss_fn,
-    #                                 device=device,
-    #                                 CFG=CFG)
+    print(len(test_dataset))
+    _, val_metrics = eval_step(model=model,
+                                    dataloader=test_dataloader,
+                                    loss_fn=loss_fn,
+                                    device=device,
+                                    CFG=CFG,
+                                    log=True)
         
-    # val_rmse, val_mae, val_mape = val_metrics
-    # print(f"Val RMSE: {val_rmse:0.4f} | Val MAE: {val_mae:0.4f} | Val MAPE: {val_mape:0.4f}")
-    model.eval()
-    log = True
-    with torch.inference_mode():
-        batch = next(iter(test_dataloader))
-        batch = recursive_to_device(batch, device)
-        data, masks = batch
-        plot_mask = masks["plot_mask"]
-        masks = masks[CFG.task].float()
-        y_pred = model(data)
-        if log:
-            y_pred = y_pred.squeeze(dim=1)
-            images, dates = data["S1"]
-            images, dates, gt_masks, pred_masks = \
-                images.cpu().numpy(), dates.cpu().numpy(), \
-                masks.cpu().numpy(), y_pred.cpu().numpy()        
-            gt_masks[gt_masks == -999] = -1
-            gt_masks[gt_masks < -1] = 0
-            i = 0
-            for image, date, gt_mask, pred_mask in \
-                zip(images, dates, gt_masks, pred_masks):
-                image = image[len(date[date != 0]) - 1]
-                image = image[CFG.satellites["S1"]["rgb_bands"]].transpose(1, 2, 0)
-                image = ((image - np.min(image)) / (np.max(image) - np.min(image)))
-                # pred_mask_whole = generate_heatmap(copy.deepcopy(pred_mask))
-                # pred_mask[gt_mask == -1] = -1
-                plt.imsave(f"eval_results/{i}_S1.png", image)
-                plt.imsave(f"eval_results/{i}_gt.png", gt_mask)
-                plt.imsave(f"eval_results/{i}_pred_mask_whole.png", pred_mask)
-                i += 1
+    val_rmse, val_mae, val_mape = val_metrics
+    print(f"Val RMSE: {val_rmse:0.4f} | Val MAE: {val_mae:0.4f} | Val MAPE: {val_mape:0.4f}")
 
 if __name__ == "__main__":        
     parser = argparse.ArgumentParser(description="Training configuration")
@@ -125,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_augmentation', type=bool, default=False, help="Whether to use data augmentation or not")
     parser.add_argument('--task', type=str, default="crop_yield", 
                         help="Available Tasks: sowing_date, transplanting_date, harvesting_date, crop_yield")
-    parser.add_argument('--actual_season', default=False, action='store_true', help="Whether to consider actual season or not")
+    parser.add_argument('--actual_season', default=False, help="Whether to consider actual season or not")
     parser.add_argument('--models_dir', type=str, default="./models", help="Directory to save models")
     parser.add_argument('--eval_dir', type=str, default="./eval_results", help="Directory to evaluate model")
     parser.add_argument("--seed", default=42, type=int, help="Random seed for reproducibility")
