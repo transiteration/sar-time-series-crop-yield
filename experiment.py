@@ -17,13 +17,20 @@ from utils.metric import get_metrics, RMSELoss
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 warnings.filterwarnings("ignore")
-setproctitle.setproctitle("miras_crop_yield_beginning")
+setproctitle.setproctitle("miras_crop_yield_training")
 
-def checkpoint(log, config):
-    with open(
-            os.path.join(CFG.log_dir, CFG.model_name + "_trainlog.json"), "w"
-    ) as outfile:
-        json.dump(log, outfile, indent=4)
+# Utility Functions
+def checkpoint(log, CFG, epoch=None, best=False):
+    if best:
+        log = {epoch: log}
+        best_path = os.path.join(CFG.log_dir, f"{CFG.model_name}_trainlog_best.json")
+        if os.path.exists(best_path):
+            os.remove(best_path)
+        with open(best_path, "w") as outfile:
+            json.dump(log, outfile, indent=4)
+    else:
+        with open(os.path.join(CFG.log_dir, f"{CFG.model_name}_trainlog.json"), "w") as outfile:
+            json.dump(log, outfile, indent=4)
 
 def set_seed(seed=42):
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -37,7 +44,6 @@ def set_seed(seed=42):
         torch.use_deterministic_algorithms(True, warn_only=True)
     except Exception as e:
         print("Can not use deterministic algorithm. Error: ", e)
-    print(f"> SEEDING DONE {seed}")
 
 def recursive_to_device(x, device):
     if isinstance(x, torch.Tensor):
@@ -47,35 +53,25 @@ def recursive_to_device(x, device):
     else:
         return [recursive_to_device(c, device) for c in x]
 
-def train_step(model: torch.nn.Module,
-               dataloader: torch.utils.data.DataLoader,
-               optimizer: torch.optim.Optimizer,
-               loss_fn,
-               device: torch.device,
-               task: str,
-               CFG):
+# Training and Evaluation Functions
+def train_step(model, dataloader, optimizer, loss_fn, device, CFG):
     model.train()
     loss_meter = tnt.meter.AverageValueMeter()
-    predictions = None
-    targets = None
-    pid_masks = None
-    
+    predictions, targets, pid_masks = None, None, None
+
     for i, batch in enumerate(dataloader):
         batch = recursive_to_device(batch, device)
         data, masks = batch
         plot_mask = masks["plot_mask"]
-        masks = masks[task].float()
-
+        masks = masks[CFG.task].float()
         optimizer.zero_grad()
         y_pred = model(data)
-        loss = loss_fn(y_pred, masks, plot_mask)
+        loss = loss_fn(y_pred, masks, plot_mask) if CFG.task == "crop_yield" else loss_fn(y_pred, masks)
         loss.backward()
         optimizer.step()
 
         if predictions is None:
-            predictions = y_pred
-            targets = masks
-            pid_masks = plot_mask
+            predictions, targets, pid_masks = y_pred, masks, plot_mask
         else:
             predictions = torch.cat([predictions, y_pred], dim=0)
             targets = torch.cat([targets, masks], dim=0)
@@ -83,35 +79,25 @@ def train_step(model: torch.nn.Module,
 
         loss_meter.add(loss.item())
 
-    metrics = get_metrics(predictions, targets, pid_masks, ignore_index=CFG.ignore_index, task=task)
+    metrics = get_metrics(predictions, targets, pid_masks, ignore_index=CFG.ignore_index, task=CFG.task)
     return loss_meter.value()[0], metrics
 
-def eval_step(model: torch.nn.Module,
-              dataloader: torch.utils.data.DataLoader,
-              loss_fn,
-              device: torch.device,
-              task: str,
-              CFG):
+def eval_step(model, dataloader, loss_fn, device, CFG):
     model.eval()
     loss_meter = tnt.meter.AverageValueMeter()
-    predictions = None
-    targets = None
-    pid_masks = None
+    predictions, targets, pid_masks = None, None, None
 
     with torch.inference_mode():
         for i, batch in enumerate(dataloader):
             batch = recursive_to_device(batch, device)
             data, masks = batch
             plot_mask = masks["plot_mask"]
-            masks = masks[task].float()
-
+            masks = masks[CFG.task].float()
             y_pred = model(data)
-            loss = loss_fn(y_pred, masks, plot_mask)
+            loss = loss_fn(y_pred, masks, plot_mask) if CFG.task == "crop_yield" else loss_fn(y_pred, masks)
 
             if predictions is None:
-                predictions = y_pred
-                targets = masks
-                pid_masks = plot_mask
+                predictions, targets, pid_masks = y_pred, masks, plot_mask
             else:
                 predictions = torch.cat([predictions, y_pred], dim=0)
                 targets = torch.cat([targets, masks], dim=0)
@@ -119,14 +105,17 @@ def eval_step(model: torch.nn.Module,
 
             loss_meter.add(loss.item())
 
-    metrics = get_metrics(predictions, targets, pid_masks, ignore_index=CFG.ignore_index, task=task)
+    metrics = get_metrics(predictions, targets, pid_masks, ignore_index=CFG.ignore_index, task=CFG.task)
     return loss_meter.value()[0], metrics
 
+# Main Training Loop
 def train_loop(CFG) -> None:
     set_seed(CFG.seed)
-    os.makedirs(CFG.save_dir, exist_ok=True)
+    device = torch.device(CFG.device)
     os.makedirs(CFG.log_dir, exist_ok=True)
+    os.makedirs(CFG.models_dir, exist_ok=True)
 
+    # Satellite Metadata Setup
     satellite_metadata = {
         "S1": {
             "bands": ['VV', 'VH'],
@@ -136,19 +125,16 @@ def train_loop(CFG) -> None:
         }
     }
     CFG.satellites = {"S1": satellite_metadata["S1"]}
-    CFG.primary_sat = "S1"
     CFG.img_size = satellite_metadata["S1"]["img_size"]
-    device = torch.device(CFG.device)
-
-    data_dir = CFG.data_dir
-    df = pd.read_csv(os.path.join(data_dir, "sickle_dataset_tabular.csv"))
+    
+    # Data Loading
+    df = pd.read_csv(os.path.join(CFG.data_dir, "sickle_dataset_tabular.csv"))
     df = df[df.YIELD > 0].reset_index(drop=True)
     train_df = df[df.SPLIT == "train"].reset_index(drop=True)
     val_df = df[df.SPLIT == "val"].reset_index(drop=True)
-    test_df = df[df.SPLIT == "test"].reset_index(drop=True)
 
     dt_args = dict(
-        data_dir=data_dir,
+        data_dir=CFG.data_dir,
         satellites=CFG.satellites,
         ignore_index=CFG.ignore_index,
         transform=CFG.use_augmentation,
@@ -162,20 +148,21 @@ def train_loop(CFG) -> None:
     collate_fn = lambda x: utae_utils.pad_collate(x, pad_value=CFG.pad_value)
 
     train_dataloader = DataLoader(
-        train_dataset,
+        dataset=train_dataset,
         batch_size=CFG.batch_size,
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=CFG.num_workers,
     )
     val_dataloader = DataLoader(
-        val_dataset,
+        dataset=val_dataset,
         batch_size=CFG.batch_size,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=CFG.num_workers,
     )
 
+    # Model, Optimizer, Loss Function Setup
     model = model_utils.Fusion_model(CFG)
     model.apply(weight_init)
     model.to(device)
@@ -187,30 +174,26 @@ def train_loop(CFG) -> None:
     criterion = RMSELoss(ignore_index=CFG.ignore_index)
     scheduler = CosineAnnealingLR(optimizer, T_max=3 * CFG.epochs // 4, eta_min=1e-4)
 
+    # Training
     trainlog = {}
     best_metric = torch.inf
-
     pbar = tqdm(range(1, CFG.epochs + 1), total=CFG.epochs, desc="Training Loop")
-
     for epoch in pbar:
-        print(f"EPOCH {epoch}/{CFG.epochs}")
-
         train_loss, train_metrics = train_step(model=model,
                                                dataloader=train_dataloader,
                                                optimizer=optimizer,
                                                loss_fn=criterion,
                                                device=device,
-                                               task=CFG.task,
                                                CFG=CFG)
 
         val_loss, val_metrics = eval_step(model=model,
                                           dataloader=val_dataloader,
                                           loss_fn=criterion,
                                           device=device,
-                                          task=CFG.task,
                                           CFG=CFG)
 
-        scheduler.step()
+        if epoch < 3 * CFG.epochs // 4:
+            scheduler.step()
 
         lr = optimizer.param_groups[0]["lr"]
         train_rmse, train_mae, train_mape = train_metrics
@@ -218,9 +201,7 @@ def train_loop(CFG) -> None:
         deciding_metric = val_mae
 
         gpu_mem = torch.cuda.memory_reserved() / 1e9 if torch.cuda.is_available() else 0
-        pbar.set_postfix(Val_RMSE=f"{val_rmse:0.4f}", Val_MAE=f"{val_mae:0.4f}", 
-                         LR=f"{lr:0.6f}", GPU_Mem=f"{gpu_mem:0.2f} GB")
-
+        pbar.set_postfix(LR=f"{lr:0.6f}", GPU_Mem=f"{gpu_mem:0.2f} GB")
         print(f"Val RMSE: {val_rmse:0.4f} | Val MAE: {val_mae:0.4f} | Val MAPE: {val_mape:0.4f}")
 
         trainlog[epoch] = {
@@ -235,8 +216,6 @@ def train_loop(CFG) -> None:
             "lr": lr,
         }
 
-        checkpoint(trainlog, CFG)
-
         save_dict = {
             "epoch": epoch,
             "optimizer": optimizer.state_dict(),
@@ -246,64 +225,45 @@ def train_loop(CFG) -> None:
         if deciding_metric < best_metric:
             print(f"Valid Score Improved ({best_metric:0.4f} ---> {deciding_metric:0.4f})")
             best_metric = deciding_metric
-            torch.save(save_dict, os.path.join(CFG.save_dir, CFG.model_name) + "_best.pth")
-        torch.save(save_dict, os.path.join(CFG.save_dir, CFG.model_name) + "_last.pth")
+            torch.save(save_dict, os.path.join(CFG.models_dir, CFG.model_name) + "_best.pth")
+            checkpoint(log=trainlog[epoch], CFG=CFG, epoch=epoch, best=True)
+
+        torch.save(save_dict, os.path.join(CFG.models_dir, CFG.model_name) + "_last.pth")
+        checkpoint(log=trainlog, CFG=CFG)
 
     print("Training complete.")
 
 if __name__ == "__main__":        
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Training configuration")
     parser.add_argument(
         "--model",
         default="utae",
         type=str,
         help="Type of architecture to use. Can be one of: (utae/unet3d/fpn/convlstm/convgru/uconvlstm/buconvlstm)",
     )
-    parser.add_argument("--encoder_widths", default="[64,128]", type=str)
-    parser.add_argument("--decoder_widths", default="[32,128]", type=str)
-    parser.add_argument("--out_conv", default="[32, 16]")
-    parser.add_argument("--str_conv_k", default=4, type=int)
-    parser.add_argument("--str_conv_s", default=2, type=int)
-    parser.add_argument("--str_conv_p", default=1, type=int)
-    parser.add_argument("--agg_mode", default="att_group", type=str)
-    parser.add_argument("--encoder_norm", default="group", type=str)
-    parser.add_argument("--n_head", default=16, type=int)
-    parser.add_argument("--d_model", default=256, type=int)
-    parser.add_argument("--d_k", default=4, type=int)
+    parser.add_argument('--model_name', type=str, default="sample", help="Name of the model")
     parser.add_argument(
         "--device",
-        default= "cuda" if torch.cuda.is_available() else "cpu",
+        default="cuda" if torch.cuda.is_available() else "cpu",
         type=str,
         help="Name of device to use for tensor computations (cuda/cpu)",
     )
-    parser.add_argument(
-        "--num_workers", default=10, type=int, help="Number of data loading workers"
-    )
-    parser.add_argument("--seed", default=42, type=int, help="Random seed")
-    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs per fold")
-    parser.add_argument("--batch_size", default=32, type=int, help="Batch size")
+    parser.add_argument("--epochs", default=100, type=int, help="Number of epochs per fold")
+    parser.add_argument("--batch_size", default=128, type=int, help="Batch size")
     parser.add_argument("--lr", default=1e-1, type=float, help="Learning rate")
-    parser.add_argument("--num_classes", default=1, type=int)
-    parser.add_argument("--ignore_index", default=-999, type=int)
-    parser.add_argument("--pad_value", default=0, type=float)
-    parser.add_argument("--padding_mode", default="reflect", type=str)
-    parser.add_argument('--task', type=str, default="crop_yield", help="Available Tasks are crop_yield")
-    parser.add_argument('--actual_season', default=True, help="whether to consider actual season or not.")
-    parser.add_argument('--data_dir', type=str, default="./sickle_toy_dataset")
-    parser.add_argument('--use_augmentation', type=bool, default=True)
-    parser.add_argument('--log_dir', type=str, default="./logs")
-    parser.add_argument('--save_dir', type=str, default="./models")
-    parser.add_argument('--model_name', type=str, default="sample")
+    parser.add_argument("--num_classes", default=1, type=int, help="Number of output classes")
+    parser.add_argument("--ignore_index", default=-999, type=int, help="Index to ignore during training")
+    parser.add_argument("--out_conv", default=[32, 16], nargs='+', type=int, help="Output convolutional layers")
+    parser.add_argument("--pad_value", default=0, type=float, help="Padding value for the input data")
+    parser.add_argument("--num_workers", default=10, type=int, help="Number of data loading workers")
+    parser.add_argument('--data_dir', type=str, default="/home/thankscarbon/Documents/miras/sickle_dataset", help="Directory for the dataset")
+    parser.add_argument('--use_augmentation', type=bool, default=True, help="Whether to use data augmentation or not")
+    parser.add_argument('--task', type=str, default="crop_yield", 
+                        help="Available Tasks: sowing_date, transplanting_date, harvesting_date, crop_yield")
+    parser.add_argument('--actual_season', type=bool, default=False, help="Whether to consider actual season or not")
+    parser.add_argument('--log_dir', type=str, default="./logs", help="Directory for logging")
+    parser.add_argument('--models_dir', type=str, default="./models", help="Directory to save models")
+    parser.add_argument("--seed", default=42, type=int, help="Random seed for reproducibility")
     parser.set_defaults(cache=False)
-    CFG = parser.parse_args() 
-    list_args = ["encoder_widths", "decoder_widths", "out_conv"]
-    for k, v in vars(CFG).items():
-        if k in list_args and v is not None:
-            v = v.replace("[", "")
-            v = v.replace("]", "")
-            try:
-                CFG.__setattr__(k, list(map(int, v.split(","))))
-            except:
-                CFG.__setattr__(k, list(map(str, v.split(","))))
-
+    CFG = parser.parse_args()     
     train_loop(CFG)

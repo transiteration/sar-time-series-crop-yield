@@ -3,3 +3,6 @@ sickle_toy_dataset/
 logs/
 models/
 *.pth
+eval_results
+__pycache__
+*DS_Store

@@ -21,21 +21,21 @@ class Build_model(nn.Module):
         if config.model == "utae":
             model = utae.UTAE(
                 input_dim=input_dim,
-                encoder_widths=config.encoder_widths,
-                decoder_widths=config.decoder_widths,
-                out_conv=config.out_conv,
-                str_conv_k=config.str_conv_k,
-                str_conv_s=config.str_conv_s,
-                str_conv_p=config.str_conv_p,
-                agg_mode=config.agg_mode,
-                encoder_norm=config.encoder_norm,
-                n_head=config.n_head,
-                d_model=config.d_model,
-                d_k=config.d_k,
+                encoder_widths=[64, 128],
+                decoder_widths=[32, 128],
+                out_conv=[32, 16],
+                str_conv_k=4,
+                str_conv_s=2,
+                str_conv_p=1,
+                agg_mode="att_group",
+                encoder_norm="group",
+                n_head=16,
+                d_model=256,
+                d_k=4,
                 encoder=False,
                 return_maps=False,
                 pad_value=config.pad_value,
-                padding_mode=config.padding_mode,
+                padding_mode="reflect",
             )
         elif config.model == "unet3d":
             model = pastis_unet3d.UNet3D(
