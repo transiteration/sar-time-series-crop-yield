@@ -2,15 +2,13 @@ import os
 import torch
 import argparse
 import warnings
-import numpy as np
 import setproctitle
 import pandas as pd
+from utils.metric import RMSELoss
 from torch.utils.data import DataLoader
 from utils.dataset import SICKLE_Dataset
 from utils import utae_utils, model_utils
-from utils.metric import RMSELoss
-import matplotlib.pyplot as plt
-from experiment import set_seed, eval_step, recursive_to_device
+from experiment import set_seed, eval_step
 
 warnings.filterwarnings("ignore")
 setproctitle.setproctitle("miras_crop_yield_evaluation")
@@ -60,7 +58,6 @@ def eval_process(CFG) -> None:
     checkpoint = torch.load(os.path.join(CFG.models_dir, CFG.model_name + ".pth"))
     model.load_state_dict(checkpoint["model"])
     loss_fn = RMSELoss(ignore_index=CFG.ignore_index)
-    print(len(test_dataset))
     _, val_metrics = eval_step(model=model,
                                     dataloader=test_dataloader,
                                     loss_fn=loss_fn,
