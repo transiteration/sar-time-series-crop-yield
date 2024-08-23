@@ -68,36 +68,37 @@ def eval_process(CFG) -> None:
     val_rmse, val_mae, val_mape = val_metrics
     print(f"Val RMSE: {val_rmse:0.4f} | Val MAE: {val_mae:0.4f} | Val MAPE: {val_mape:0.4f}")
 
-if __name__ == "__main__":        
-    parser = argparse.ArgumentParser(description="Training configuration")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Evaluation Configuration")
     parser.add_argument(
         "--model",
         default="utae",
         type=str,
-        help="Type of architecture to use. Can be one of: (utae/unet3d/fpn/convlstm/convgru/uconvlstm/buconvlstm)",
-    )
-    parser.add_argument('--model_name', type=str, required=True, help="Name of the model")
+        help="Type of architecture to use. Can be one of: (utae/unet3d/fpn/convlstm/convgru)"
+        )
+    parser.add_argument("--model_name", type=str, required=True, help="Name of the model")
     parser.add_argument(
         "--device",
         default="cuda" if torch.cuda.is_available() else "cpu",
         type=str,
-        help="Name of device to use for tensor computations (cuda/cpu)",
+        help="Name of device to use for tensor computations (cuda/cpu)"
     )
-    parser.add_argument("--batch_size", default=128, type=int, help="Batch size")
-    parser.add_argument("--lr", default=1e-1, type=float, help="Learning rate")
-    parser.add_argument("--num_classes", default=1, type=int, help="Number of output classes")
-    parser.add_argument("--ignore_index", default=-999, type=int, help="Index to ignore during training")
-    parser.add_argument("--out_conv", default=[32, 16], nargs='+', type=int, help="Output convolutional layers")
-    parser.add_argument("--pad_value", default=0, type=float, help="Padding value for the input data")
-    parser.add_argument("--num_workers", default=10, type=int, help="Number of data loading workers")
-    parser.add_argument('--data_dir', type=str, default="/home/thankscarbon/Documents/miras/sickle_dataset", help="Directory for the dataset")
-    parser.add_argument('--use_augmentation', type=bool, default=False, help="Whether to use data augmentation or not")
-    parser.add_argument('--task', type=str, default="crop_yield", 
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("--lr", type=float, default=1e-1, help="Learning rate")
+    parser.add_argument("--num_classes", type=int, default=1, help="Number of ouput classes")
+    parser.add_argument("--ignore_index", type=int, default=-999, help="Index to ignore during training")
+    parser.add_argument("--out_conv", type=int, default=[32, 16], nargs="+", help="Output convolutional layers")
+    parser.add_argument("--pad_value", type=float, default=0, help="Padding value for the input data")
+    parser.add_argument("--num_workers", type=int, default=10, help="Number of data loading workers")
+    parser.add_argument("--data_dir", type=str, 
+                        default="/home/thankscarbon/Documents/miras/sickle_dataset", help="Directory for the dataset")
+    parser.add_argument("--use_augmentation", type=bool, default=False, help="Whether to use data augmentation or not")
+    parser.add_argument("--task", type=str, default="crop_yield", 
                         help="Available Tasks: sowing_date, transplanting_date, harvesting_date, crop_yield")
-    parser.add_argument('--actual_season', default=False, help="Whether to consider actual season or not")
-    parser.add_argument('--models_dir', type=str, default="./models", help="Directory to save models")
-    parser.add_argument('--eval_dir', type=str, default="./eval_results", help="Directory to evaluate model")
-    parser.add_argument("--seed", default=42, type=int, help="Random seed for reproducibility")
+    parser.add_argument("--actual_season", type=bool, default=False, help="Whether to consider actual season or not")
+    parser.add_argument("--models_dir", type=str, default="./models", help="Directory to save models")
+    parser.add_argument("--eval_dir", type=str, default="./eval_results", help="Directory to save evaluation results")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.set_defaults(cache=False)
-    CFG = parser.parse_args()     
+    CFG = parser.parse_args()
     eval_process(CFG)
