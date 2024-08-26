@@ -139,7 +139,7 @@ def train_loop(CFG) -> None:
     # Satellite Metadata Setup
     satellite_metadata = {
         "S1": {
-            "bands": ['VV', 'VH'],
+            "bands": ["VV", "VH"],
             "rgb_bands": [0, 1, 0],
             "mask_res": 10,
             "img_size": (32, 32),
@@ -262,7 +262,7 @@ if __name__ == "__main__":
         type=str,
         help="Type of architecture to use. Can be one of: (utae/unet3d/fpn/convlstm/convgru/uconvlstm/buconvlstm)",
     )
-    parser.add_argument('--model_name', type=str, default="sample", help="Name of the model")
+    parser.add_argument("--model_name", type=str, default="sample", help="Name of the model")
     parser.add_argument(
         "--device",
         default="cuda" if torch.cuda.is_available() else "cpu",
@@ -274,17 +274,17 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-1, help="Learning rate")
     parser.add_argument("--num_classes", type=int, default=1, help="Number of output classes")
     parser.add_argument("--ignore_index", type=int, default=-999, help="Index to ignore during training")
-    parser.add_argument("--out_conv", type=int, default=[32, 16], nargs='+', help="Output convolutional layers")
+    parser.add_argument("--out_conv", type=int, default=[32, 16], nargs="+", help="Output convolutional layers")
     parser.add_argument("--pad_value", type=float, default=0, help="Padding value for the input data")
     parser.add_argument("--num_workers", type=int, default=10, help="Number of data loading workers")
-    parser.add_argument('--data_dir', type=str, 
+    parser.add_argument("--data_dir", type=str, 
                         default="/home/thankscarbon/Documents/miras/sickle_dataset", help="Directory for the dataset")
-    parser.add_argument('--use_augmentation', type=bool, default=True, help="Whether to use data augmentation or not")
-    parser.add_argument('--task', type=str, default="crop_yield", 
+    parser.add_argument("--use_augmentation", type=bool, default=True, help="Whether to use data augmentation or not")
+    parser.add_argument("--task", type=str, default="crop_yield", 
                         help="Available Tasks: sowing_date, transplanting_date, harvesting_date, crop_yield")
-    parser.add_argument('--actual_season', type=bool, default=False, help="Whether to consider actual season or not")
-    parser.add_argument('--log_dir', type=str, default="./logs", help="Directory for logging")
-    parser.add_argument('--models_dir', type=str, default="./models", help="Directory to save models")
+    parser.add_argument("--actual_season", type=bool, default=False, help="Whether to consider actual season or not")
+    parser.add_argument("--log_dir", type=str, default="./logs", help="Directory for logging")
+    parser.add_argument("--models_dir", type=str, default="./models", help="Directory to save models")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.set_defaults(cache=False)
     CFG = parser.parse_args()     

@@ -22,7 +22,7 @@ def eval_process(CFG) -> None:
     # Satellite Metadata Setup
     satellite_metadata = {
         "S1": {
-            "bands": ['VV', 'VH'],
+            "bands": ["VV", "VH"],
             "rgb_bands": [0, 1, 0],
             "mask_res": 10,
             "img_size": (32, 32),
